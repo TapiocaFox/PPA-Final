@@ -20,4 +20,5 @@ Install `meshplot`:
 pip install git+https://github.com/skoch9/meshplot.git
 ```
 
+Add `mpl-v053/bin` to your path.
 And also setup your ipykernel...
