@@ -1,9 +1,23 @@
 # PPA-Final
 ## Setup
-Create python venv
+Create python venv:
 ```
-python3 -m venv venv
+python3 -m venv .venv
 ```
+
+Activate venv:
 ```
-python -m pip install libigl
+. ./.venv/bin/activate
 ```
+
+Install requirements:
+```
+pip install numpy libigl scikit-learn ipywidgets matplotlib pythreejs
+```
+
+Install `meshplot`:
+```
+pip install git+https://github.com/skoch9/meshplot.git
+```
+
+And also setup your ipykernel...
