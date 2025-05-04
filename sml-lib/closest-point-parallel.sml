@@ -22,6 +22,15 @@ struct
       Math.sqrt (dx*dx + dy*dy + dz*dz)
     end
 
+  fun array_to_list arr =
+    let
+      fun loop i acc =
+        if i < 0 then acc
+        else loop (i-1) (Array.sub(arr, i)::acc)
+    in
+      loop (Array.length arr - 1) []
+    end
+
   fun main () =
     let
       val args = CommandLine.arguments ()
@@ -34,11 +43,22 @@ struct
       val points_list = List.map (fn s => case parse_floats s of [x, y, z] => (x, y, z) | _ => raise Fail "Invalid point") (List.tl lines)
       val n = List.length points_list
       val points = Array.fromList points_list
+      val points_seq = Seq.fromList points_list
+      val min_result =
+        Parallel.reduce
+          (fn ((i1, d1), (i2, d2)) => if d1 < d2 then (i1, d1) else (i2, d2))
+          (0, h)  (* h is a large value, e.g., 1e10 *)
+          (0, n)
+          (fn i => (i, norm3 point (Array.sub(points, i))))
       val results =
-        Parallel.tabulate (n, fn i => (i, norm3 point (Array.sub(points, i))))
-      val filtered = List.filter (fn (_, norm) => norm < h) results
-      val indices = List.map #1 filtered
-      val norms = List.map #2 filtered
+        Parallel.tabulate (0, n) (fn i => (i, norm3 point (Array.sub(points, i))))
+      val filtered =
+        Parallel.filter (0, n)
+          (fn i => (i, norm3 point (Array.sub(points, i))))
+          (fn i => norm3 point (Array.sub(points, i)) < h)
+      val filtered_list = Seq.toList filtered
+      val indices = List.map #1 filtered_list
+      val norms = List.map #2 filtered_list
       val indices_str = String.concatWith " " (List.map Int.toString indices)
       val norms_str = String.concatWith " " (List.map Real.toString norms)
     in
