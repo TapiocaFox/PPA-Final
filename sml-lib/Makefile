@@ -6,6 +6,9 @@ closest-point: closest-point.sml closest-point.mlb
 closest-point-parallel: closest-point-parallel.sml closest-point-parallel.mlb
 	$(MPL) -default-type int64 -default-type word64 -output ../closest-point-parallel closest-point-parallel.mlb
 
+closest-point-spatial: closest-point-spatial.sml closest-point-spatial.mlb
+	$(MPL) -default-type int64 -default-type word64 -output ../closest-point-spatial closest-point-spatial.mlb
+
 closest-point-spatial-parallel: closest-point-spatial-parallel.sml closest-point-spatial-parallel.mlb
 	$(MPL) -default-type int64 -default-type word64 -output ../closest-point-spatial-parallel closest-point-spatial-parallel.mlb
 
