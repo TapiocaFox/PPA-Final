@@ -58,6 +58,7 @@ struct
         Parallel.filter (0, n)
           idx_dist
           (fn i => #2 (idx_dist i) < h)
+          
       val filtered_list = Seq.toList filtered
       val indices = List.map #1 filtered_list
       val norms = List.map #2 filtered_list
