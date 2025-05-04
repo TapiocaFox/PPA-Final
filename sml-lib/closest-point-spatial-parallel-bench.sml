@@ -1,4 +1,4 @@
-(* Benchmark driver for parallel closest point search *)
+(* Benchmark driver for parallel closest point search: parallelize across queries for real speedup *)
 open Parallel
 
 (* Utility functions: copy from closest-point-spatial.sml *)
@@ -57,7 +57,6 @@ fun flatten_index (gx, gy, gz) (ix, iy, iz) = ix * gy * gz + iy * gz + iz
 fun dist2 (x1, y1, z1) (x2, y2, z2) =
   let val dx = x1-x2 val dy = y1-y2 val dz = z1-z2 in dx*dx + dy*dy + dz*dz end
 
-(* block_cells: returns all (cx,cy,cz) in a cube of given radius around (ix,iy,iz) within bounds *)
 fun block_cells (gx, gy, gz) (ix, iy, iz) radius =
   let
     val xs = List.tabulate (2*radius+1, fn d => ix - radius + d)
@@ -69,69 +68,82 @@ fun block_cells (gx, gy, gz) (ix, iy, iz) radius =
     List.filter (fn (x,y,z) => in_bounds x gx andalso in_bounds y gy andalso in_bounds z gz) coords
   end
 
-(* Parallel version: parallelize over candidate points in the cell *)
-fun find_closest_point_parallel (grid_size, points_arr, cells_arr) bbox_min unit_size query =
+(* Helper to convert a Seq to a list *)
+fun seq_to_list s =
+  let fun go i acc = if i >= Seq.length s then List.rev acc else go (i+1) (Seq.nth s i :: acc)
+  in go 0 [] end
+
+(* Serial search for a single query *)
+fun find_closest_point_serial (grid_size, points_arr, cells_arr) bbox_min unit_size query =
   let
     val (ix, iy, iz) = get_cell_index (grid_size, bbox_min, unit_size) query
     val (gx, gy, gz) = case grid_size of [a, b, c] => (a, b, c) | _ => raise Fail "bad grid size"
-    val block_radius = 1  (* 3x3x3 block *)
+    val block_radius = 1
     val cell_indices = block_cells (gx, gy, gz) (ix, iy, iz) block_radius
     val all_candidate_indices =
       List.concat (List.map (fn (cx, cy, cz) =>
         let val cell_idx = flatten_index (gx, gy, gz) (cx, cy, cz)
         in Array.sub(cells_arr, cell_idx) end
       ) cell_indices)
-    val n = List.length all_candidate_indices
-    (* Use Parallel.tabulate to build a sequence of (point, dist2) *)
-    val seq =
-      Parallel.tabulate (0, n) (fn i =>
+    val best =
+      List.foldl (fn (i, (best_pt, best_dist)) =>
         let
-          val pt = Array.sub(points_arr, List.nth(all_candidate_indices, i))
+          val pt = Array.sub(points_arr, i)
           val d = dist2 pt query
-        in (pt, d) end)
-    (* Use Parallel.reduce to find the minimum by distance *)
-    val (best, best_dist) =
-      Parallel.reduce
-        (fn ((pt1, d1), (pt2, d2)) => if d1 < d2 then (pt1, d1) else (pt2, d2))
-        ((0.0,0.0,0.0), Real.posInf)
-        (0, n)
-        (fn i => Seq.nth seq i)
+        in
+          if d < best_dist then (pt, d) else (best_pt, best_dist)
+        end) ((0.0,0.0,0.0), Real.posInf) all_candidate_indices
   in
-    best
+    #1 best
   end
 
-(* Simple deterministic pseudo-random generator *)
-val seed = ref 42
-fun rand_real (a, b) =
+(* Parallel batch search: split queries into n chunks, process each chunk serially, run chunks in parallel *)
+fun batch_find_closest_points_parallel (grid_size, points_arr, cells_arr) bbox_min unit_size queries ncores =
   let
-    val s = !seed
-    val next = (s * 1103515245 + 12345) mod 2147483648
-    val _ = seed := next
-    val r = Real.fromInt (next mod 1000000) / 1000000.0
+    val n = List.length queries
+    val arr = Array.fromList queries
+    fun chunk_start i = (i * n) div ncores
+    fun chunk_end i = (((i+1) * n) div ncores) - 1
+    fun process_chunk i =
+      let
+        val s = chunk_start i
+        val e = chunk_end i
+        fun loop j acc = if j > e then List.rev acc
+                         else loop (j+1) (find_closest_point_serial (grid_size, points_arr, cells_arr) bbox_min unit_size (Array.sub(arr, j)) :: acc)
+      in
+        loop s []
+      end
+    val results_chunks = Parallel.tabulate (0, ncores) process_chunk
   in
-    a + r * (b - a)
-  end
-
-fun random_query ((xmin, ymin, zmin), (xmax, ymax, zmax)) =
-  (rand_real (xmin, xmax), rand_real (ymin, ymax), rand_real (zmin, zmax))
-
-fun bbox_max points =
-  let
-    fun max3 ((x1, y1, z1), (x2, y2, z2)) =
-      (Real.max (x1, x2), Real.max (y1, y2), Real.max (z1, z2))
-  in
-    case points of
-      [] => raise Fail "No points"
-    | h::t => List.foldl max3 h t
+    List.concat (seq_to_list results_chunks)
   end
 
 (* Main benchmark driver *)
 fun main () =
   let
     val (grid_size, bbox_min, unit_size, points, cells) = read_spatial_index "spatial_index.txt"
-    val bbox_max_pt = bbox_max points
-    val num_queries = 500
-    val core_counts = [1, 2, 3, 4, 5 ,6 ,7 ,8]
+    val bbox_max_pt = let
+      fun max3 ((x1, y1, z1), (x2, y2, z2)) = (Real.max (x1, x2), Real.max (y1, y2), Real.max (z1, z2))
+    in
+      case points of [] => raise Fail "No points" | h::t => List.foldl max3 h t
+    end
+    val num_queries = 5000
+    val core_counts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    val seed = ref 42
+    fun rand_real (a, b) =
+      let
+        val s = !seed
+        val next = (s * 1103515245 + 12345) mod 2147483648
+        val _ = seed := next
+        val r = Real.fromInt (next mod 1000000) / 1000000.0
+      in
+        a + r * (b - a)
+      end
+
+    (* Define random_query *)
+    fun random_query ((xmin, ymin, zmin), (xmax, ymax, zmax)) =
+      (rand_real (xmin, xmax), rand_real (ymin, ymax), rand_real (zmin, zmax))
+
     val queries = List.tabulate (num_queries, fn _ => random_query (bbox_min, bbox_max_pt))
     val points_arr = Array.fromList points
     val cells_arr = Array.fromList cells
@@ -142,7 +154,7 @@ fun main () =
       in Time.toReal (Time.- (t1, t0)) end
     fun run_for_cores n =
       let
-        val t = timeit (fn () => List.app (fn q => ignore (find_closest_point_parallel (grid_size, points_arr, cells_arr) bbox_min unit_size q)) queries)
+        val t = timeit (fn () => ignore (batch_find_closest_points_parallel (grid_size, points_arr, cells_arr) bbox_min unit_size queries n))
       in
         print ("Cores: " ^ Int.toString n ^ ", Time: " ^ Real.fmt (StringCvt.FIX (SOME 4)) t ^ "s\n")
       end
