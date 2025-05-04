@@ -12,6 +12,9 @@ closest-point-spatial: closest-point-spatial.sml closest-point-spatial.mlb
 closest-point-spatial-parallel: closest-point-spatial-parallel.sml closest-point-spatial-parallel.mlb
 	$(MPL) -default-type int64 -default-type word64 -output ../closest-point-spatial-parallel closest-point-spatial-parallel.mlb
 
+closest-point-spatial-parallel-bench: closest-point-spatial-parallel-bench.sml closest-point-spatial-parallel-bench.mlb
+	$(MPL) -default-type int64 -default-type word64 -output ../closest-point-spatial-parallel-bench closest-point-spatial-parallel-bench.mlb
+
 py-sml-test: py-sml-test.sml py-sml-test.mlb
 	$(MPL) -default-type int64 -default-type word64 -output ../py-sml-test py-sml-test.mlb
 
