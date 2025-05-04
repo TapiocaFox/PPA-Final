@@ -58,12 +58,13 @@ struct
         Parallel.filter (0, n)
           idx_dist
           (fn i => #2 (idx_dist i) < h)
-          
+
       val filtered_list = Seq.toList filtered
       val indices = List.map #1 filtered_list
       val norms = List.map #2 filtered_list
       val indices_str = String.concatWith " " (List.map Int.toString indices)
-      val norms_str = String.concatWith " " (List.map Real.toString norms)
+      val fix_exp = String.translate (fn #"~" => "-" | c => str c)
+      val norms_str = String.concatWith " " (List.map (fix_exp o Real.toString) norms)
     in
       print (indices_str ^ "\n" ^ norms_str ^ "\n")
     end

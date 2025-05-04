@@ -22,3 +22,6 @@ pip install git+https://github.com/skoch9/meshplot.git
 
 Add `mpl-v053/bin` to your path.
 And also setup your ipykernel...
+
+
+Build files in `sml-lib` using `mpl`.
