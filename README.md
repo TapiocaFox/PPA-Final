@@ -12,7 +12,7 @@ Activate venv:
 
 Install requirements:
 ```
-pip install numpy libigl scikit-learn ipywidgets matplotlib pythreejs
+pip install numpy libigl scikit-learn ipywidgets matplotlib pythreejs 
 ```
 
 Install `meshplot`:

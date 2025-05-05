@@ -127,8 +127,10 @@ fun main () =
     in
       case points of [] => raise Fail "No points" | h::t => List.foldl max3 h t
     end
-    val num_queries = 5000
-    val core_counts = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    val num_queries = CommandLineArgs.parseInt "queries" 5000
+    val num_repeat = CommandLineArgs.parseInt "repeat" 4
+    val num_procs = CommandLineArgs.parseInt "procs" 16
+    val core_counts = List.tabulate (num_procs, fn i => i + 1)
     val seed = ref 42
     fun rand_real (a, b) =
       let
@@ -154,9 +156,14 @@ fun main () =
       in Time.toReal (Time.- (t1, t0)) end
     fun run_for_cores n =
       let
-        val t = timeit (fn () => ignore (batch_find_closest_points_parallel (grid_size, points_arr, cells_arr) bbox_min unit_size queries n))
+        fun repeat k acc =
+          if k = 0 then List.rev acc
+          else repeat (k-1) (timeit (fn () => ignore (batch_find_closest_points_parallel (grid_size, points_arr, cells_arr) bbox_min unit_size queries n)) :: acc)
+        val times = repeat num_repeat []
+        val avg = List.foldl op+ 0.0 times / Real.fromInt (List.length times)
+        val times_str = String.concatWith ", " (List.map (fn t => Real.fmt (StringCvt.FIX (SOME 4)) t) times)
       in
-        print ("Cores: " ^ Int.toString n ^ ", Time: " ^ Real.fmt (StringCvt.FIX (SOME 4)) t ^ "s\n")
+        print ("Cores: " ^ Int.toString n ^ " Avg: " ^ Real.fmt (StringCvt.FIX (SOME 4)) avg ^ "s\n")
       end
     val _ = List.app run_for_cores core_counts
   in
